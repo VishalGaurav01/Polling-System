@@ -2,7 +2,7 @@
 
 A real-time polling application designed for interactive classroom sessions. Built with **React**, **Node.js**, and **Socket.io**, this tool enables teachers to conduct live polls and receive instant responses from students.
 
-### 🔗 [Live Demo](https://polling-system-1.onrender.com/)
+### 🔗 [Live Demo](https://polling-system-1-d56x.onrender.com/)
 
 ---
 
