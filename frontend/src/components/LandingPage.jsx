@@ -63,8 +63,8 @@ function LandingPage() {
             <span className="font-medium">Testing Note:</span>
           </div>
           <p className="mt-1 ml-7">
-            Clicking on "Student" will open in a new window, while "Teacher" remains in the current window. 
-            This allows a single person to test both views simultaneously for demo purposes.
+            For testing both roles simultaneously, open the application in different browser windows.
+            This allows a single person to test both student and teacher views at the same time.
           </p>
         </div>
         
@@ -82,7 +82,7 @@ function LandingPage() {
               Join live polls and submit your answers to participate in class activities
             </p>
             <div className="mt-2 text-sm text-indigo-600 dark:text-indigo-400">
-              Opens in a new window
+              Opens in current window
             </div>
           </div>
 
