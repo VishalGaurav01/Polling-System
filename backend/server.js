@@ -8,13 +8,17 @@ const app = express();
 const server = http.createServer(app);
 
 // Configure CORS for Express
-app.use(cors());
+app.use(cors({
+  origin: ['https://polling-system-1-d56x.onrender.com', 'http://localhost:5173'],
+  methods: ['GET', 'POST'],
+  credentials: true
+}));
 
 // Configure Socket.io with CORS
 const io = new Server(server, {
   cors: {
-    origin: "http://localhost:5173", // Frontend URL
-    methods: ["GET", "POST"],
+    origin: ['https://polling-system-1-d56x.onrender.com', 'http://localhost:5173'],
+    methods: ['GET', 'POST'],
     credentials: true
   }
 });
