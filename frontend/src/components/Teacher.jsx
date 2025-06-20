@@ -108,8 +108,14 @@ function Teacher() {
       toast.error('Please provide at least two answer options');
       return;
     }
+    
+    // Add this constraint - check if a correct answer is selected
+    if (correctOptionIndex === null) {
+      toast.error('Please mark at least one option as correct');
+      return;
+    }
 
-    const correctAnswer = correctOptionIndex !== null ? options[correctOptionIndex] : null;
+    const correctAnswer = options[correctOptionIndex];
     
     dispatch(pollCreateStarted());
     dispatch(createPoll({
