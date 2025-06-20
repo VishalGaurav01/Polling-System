@@ -1,12 +1,13 @@
 // Simple data model for a poll
 class Poll {
-  constructor(question, options, timeLimit = 60) {
+  constructor(question, options, timeLimit = 60, correctAnswer = null) {
     this.id = Date.now();
     this.question = question;
     this.options = options;
     this.startTime = Date.now();
     this.timeLimit = timeLimit; // Allow custom time limit
     this.answers = new Map(); // Map of student name to their answer
+    this.correctAnswer = correctAnswer; // Add this line
   }
 
   recordAnswer(studentName, answer) {
@@ -19,7 +20,8 @@ class Poll {
       question: this.question,
       options: this.options,
       totalResponses: this.answers.size,
-      counts: {}
+      counts: {},
+      correctAnswer: this.correctAnswer // Add this line
     };
 
     // Initialize counts for each option

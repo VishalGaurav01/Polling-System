@@ -66,7 +66,12 @@ io.on('connection', (socket) => {
     
     // Create new poll with the timeLimit from the client (default to 60 if not provided)
     const timeLimit = pollData.timeLimit || 60;
-    state.activePoll = new Poll(pollData.question, pollData.options, timeLimit);
+    state.activePoll = new Poll(
+      pollData.question,
+      pollData.options,
+      timeLimit,
+      pollData.correctAnswer
+    );
     
     // Broadcast the new poll to all connected clients
     io.emit('new_poll', {

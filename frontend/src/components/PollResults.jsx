@@ -1,13 +1,20 @@
-// export default PollResults;
 import React from 'react';
+import { useSelector } from 'react-redux';
+import { selectSelectedOption, selectActivePoll } from '../features/pollSlice';
 
 function PollResults({ results, timeLeft }) {
+  const userAnswer = useSelector(selectSelectedOption);
+  const activePoll = useSelector(selectActivePoll); // Get the active poll state
+  
+  // Only show correct answer when there's no active poll (poll is finished)
+  const isPollFinished = !activePoll;
+  
   return (
     <div className="max-w-2xl mx-auto p-6 rounded-lg bg-white dark:bg-dark-bg text-black dark:text-white">
       {/* Header with question number and timer */}
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-2xl font-semibold">Question</h2>
-        {timeLeft !== undefined && (
+        {timeLeft !== undefined && timeLeft > 0 && (
           <div className="flex items-center text-red-600 dark:text-red-400 text-lg font-semibold">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
               <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
@@ -24,6 +31,24 @@ function PollResults({ results, timeLeft }) {
         {results.question}
       </div>
 
+      {/* Show correct answer notification ONLY if poll is finished */}
+      {isPollFinished && results.correctAnswer && (
+        <div className="my-2 p-3 bg-indigo-100 dark:bg-indigo-900 rounded-md">
+          <div className="text-center font-bold text-green-600 dark:text-green-400">
+            Correct Answer: {results.correctAnswer}
+          </div>
+          {userAnswer && (
+            <div className="text-center mt-1">
+              {userAnswer === results.correctAnswer ? (
+                <span className="text-green-600 dark:text-green-400 font-semibold">Your answer was correct ✓</span>
+              ) : (
+                <span className="text-red-600 dark:text-red-400 font-semibold">Your answer was incorrect ✗</span>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Options and bars */}
       <div className="bg-white dark:bg-dark-bg border border-purple-300 dark:border-purple-600 rounded-b-lg p-6 space-y-6">
         {results.options.map((option, index) => {
@@ -31,13 +56,24 @@ function PollResults({ results, timeLeft }) {
           const percentage = results.totalResponses > 0
             ? Math.round((count / results.totalResponses) * 100)
             : 0;
+          
+          // Determine if this option is the correct answer, but only if poll is finished
+          const isCorrect = isPollFinished && results.correctAnswer === option;
 
           return (
             <div key={index}>
-              <div className="relative w-full h-12 bg-gray-100 dark:bg-gray-800 rounded-lg overflow-hidden border border-indigo-500">
+              <div className={`relative w-full h-12 bg-gray-100 dark:bg-gray-800 rounded-lg overflow-hidden border ${
+                isCorrect 
+                  ? 'border-green-500 dark:border-green-400' 
+                  : 'border-indigo-500 dark:border-indigo-400'
+              }`}>
                 {/* Progress bar */}
                 <div
-                  className="absolute left-0 top-0 h-full bg-indigo-500 dark:bg-indigo-600 transition-all duration-500 ease-out"
+                  className={`absolute left-0 top-0 h-full transition-all duration-500 ease-out ${
+                    isCorrect 
+                      ? 'bg-green-500 dark:bg-green-600' 
+                      : 'bg-indigo-500 dark:bg-indigo-600'
+                  }`}
                   style={{ width: `${percentage}%` }}
                 />
                 
@@ -46,13 +82,21 @@ function PollResults({ results, timeLeft }) {
                   className="absolute left-0 top-0 h-full w-full flex items-center px-4"
                   style={{ clipPath: `polygon(${percentage}% 0%, 100% 0%, 100% 100%, ${percentage}% 100%)` }}
                 >
-                  <div className="w-10 h-10 flex items-center justify-center rounded-full mr-4 text-base font-medium bg-indigo-500 dark:bg-indigo-600 text-white">
+                  <div className={`w-10 h-10 flex items-center justify-center rounded-full mr-4 text-base font-medium ${
+                    isCorrect 
+                      ? 'bg-green-500 dark:bg-green-600' 
+                      : 'bg-indigo-500 dark:bg-indigo-600'
+                  } text-white`}>
                     {index + 1}
                   </div>
                   <span className="font-medium text-lg truncate flex-grow text-gray-700 dark:text-gray-300">
-                    {option}
+                    {option} {isCorrect && <span className="text-green-500 ml-2">✓</span>}
                   </span>
-                  <span className="font-medium text-lg text-indigo-500 dark:text-indigo-400">
+                  <span className={`font-medium text-lg ${
+                    isCorrect 
+                      ? 'text-green-500 dark:text-green-400' 
+                      : 'text-indigo-500 dark:text-indigo-400'
+                  }`}>
                     {percentage}%
                   </span>
                 </div>
@@ -62,11 +106,15 @@ function PollResults({ results, timeLeft }) {
                   className="absolute left-0 top-0 h-full w-full flex items-center px-4"
                   style={{ clipPath: `polygon(0% 0%, ${percentage}% 0%, ${percentage}% 100%, 0% 100%)` }}
                 >
-                  <div className="w-10 h-10 flex items-center justify-center rounded-full mr-4 text-base font-medium bg-white dark:bg-gray-200 text-indigo-500">
+                  <div className={`w-10 h-10 flex items-center justify-center rounded-full mr-4 text-base font-medium bg-white dark:bg-gray-200 ${
+                    isCorrect 
+                      ? 'text-green-500' 
+                      : 'text-indigo-500'
+                  }`}>
                     {index + 1}
                   </div>
                   <span className="font-medium text-lg truncate flex-grow text-white">
-                    {option}
+                    {option} {isCorrect && <span className="text-white ml-2">✓</span>}
                   </span>
                   <span className="font-medium text-lg text-white">
                     {percentage}%

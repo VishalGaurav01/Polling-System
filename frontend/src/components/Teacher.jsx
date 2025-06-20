@@ -43,7 +43,8 @@ function Teacher() {
   const [options, setOptions] = useState(['', '']);
   const [timeLimit, setTimeLimit] = useState(60);
   const [showChat, setShowChat] = useState(false);
-
+  const [correctOptionIndex, setCorrectOptionIndex] = useState(null);
+  
   useEffect(() => {
     dispatch({ type: 'socket/identifyAsTeacher' });
     dispatch({ type: 'socket/requestParticipants' });
@@ -57,6 +58,7 @@ function Teacher() {
       return () => clearTimeout(timer);
     }
   }, [error, dispatch]);
+
   useEffect(() => {
     // Request participants list periodically
     const participantsInterval = setInterval(() => {
@@ -65,6 +67,7 @@ function Teacher() {
     
     return () => clearInterval(participantsInterval);
   }, [dispatch]);
+
   const handleQuestionParsed = ({question: parsedQuestion, options: parsedOptions}) => {
     setQuestion(parsedQuestion);
     setOptions(parsedOptions);
@@ -86,6 +89,11 @@ function Teacher() {
       const newOptions = [...options];
       newOptions.splice(index, 1);
       setOptions(newOptions);
+      if (correctOptionIndex === index) {
+        setCorrectOptionIndex(null);
+      } else if (correctOptionIndex > index) {
+        setCorrectOptionIndex(correctOptionIndex - 1);
+      }
     }
   };
 
@@ -100,14 +108,18 @@ function Teacher() {
       toast.error('Please provide at least two answer options');
       return;
     }
+
+    const correctAnswer = correctOptionIndex !== null ? options[correctOptionIndex] : null;
     
     dispatch(pollCreateStarted());
     dispatch(createPoll({
       question: question.trim(),
       options: validOptions,
-      timeLimit
+      timeLimit,
+      correctAnswer
     }));
   };
+
   const handleKickStudent = (studentName) => {
     setConfirmModal({
       isOpen: true,
@@ -134,6 +146,7 @@ function Teacher() {
     setQuestion('');
     setOptions(['', '']);
     setTimeLimit(60);
+    setCorrectOptionIndex(null);
     dispatch({ type: 'poll/resetState' });
     setTimeout(() => {
       dispatch({ type: 'socket/requestParticipants' });
@@ -149,7 +162,6 @@ function Teacher() {
       }
     });
   };
-
 
   if (results) {
     return (
@@ -285,10 +297,10 @@ function Teacher() {
 
       <div className="mb-6">
         <div className="flex justify-between items-center mb-2">
-          <label className="block text-gray-700 dark:text-gray-300 font-semibold">
+          <label className="text-gray-700 dark:text-gray-300 font-semibold">
             Edit Options
           </label>
-          <label className="block text-gray-700 dark:text-gray-300 font-semibold">
+          <label className="text-gray-700 dark:text-gray-300 font-semibold">
             Is it Correct?
           </label>
         </div>
@@ -306,22 +318,27 @@ function Teacher() {
               placeholder={`Option ${index + 1}`}
               disabled={isPollCreating}
             />
-            <div className="flex items-center">
-              <label className="inline-flex items-center mr-4">
+            
+            <div className="flex items-center ml-4">
+              {/* <span className="mr-2 text-gray-700 dark:text-gray-300">Is it Correct?</span> */}
+              <label className="inline-flex items-center mr-2">
                 <input
                   type="radio"
                   name={`correct-${index}`}
-                  className="form-radio h-5 w-5 text-indigo-600"
+                  checked={correctOptionIndex === index}
+                  onChange={() => setCorrectOptionIndex(index)}
+                  className="form-radio h-4 w-4 text-blue-600"
                   disabled={isPollCreating}
                 />
-                <span className="ml-2 text-gray-700 dark:text-gray-300">Yes</span>
+                <span className="ml-1">Yes</span>
               </label>
               <label className="inline-flex items-center">
                 <input
                   type="radio"
                   name={`correct-${index}`}
-                  className="form-radio h-5 w-5 text-indigo-600"
-                  defaultChecked
+                  checked={correctOptionIndex !== index}
+                  onChange={() => setCorrectOptionIndex(null)}
+                  className="form-radio h-4 w-4 text-blue-600"
                   disabled={isPollCreating}
                 />
                 <span className="ml-2 text-gray-700 dark:text-gray-300">No</span>
