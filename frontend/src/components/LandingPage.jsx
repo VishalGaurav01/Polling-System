@@ -30,8 +30,8 @@ function LandingPage() {
     }
     
     if (selectedRole === 'student') {
-      // Open student login page in a new window
-      window.open('/student/login', '_blank', 'noopener,noreferrer');
+      // Navigate to student login in the same window
+      navigate('/student/login');
     } else if (selectedRole === 'teacher') {
       navigate('/teacher');
     }
