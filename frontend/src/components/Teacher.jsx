@@ -20,6 +20,7 @@ import PollResults from './PollResults';
 import { useToast } from '../hooks/useToast';
 import MCQImageParser from './MCQImageParser';
 import ConfirmModal from './ConfirmModal';
+import ConfusionAlert from './ConfusionAlert';
 
 function Teacher() {
   // Add new state for the confirm modal
@@ -215,6 +216,7 @@ function Teacher() {
   if (results) {
     return (
       <div className="max-w-3xl mx-auto p-4 bg-white dark:bg-dark-bg text-black dark:text-white">
+         <ConfusionAlert />
         <div className="flex justify-end mb-4">
           <button
             onClick={() => navigate('/poll-history')}
@@ -280,6 +282,7 @@ function Teacher() {
 
   return (
     <div className="max-w-3xl mx-auto p-4 bg-white dark:bg-dark-bg text-black dark:text-white">
+      <ConfusionAlert />
       <div className="mb-6">
         <button className="bg-indigo-500 text-white font-semibold py-2 px-4 rounded-full flex items-center">
           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">

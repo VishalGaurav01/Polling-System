@@ -52,6 +52,9 @@ io.on('connection', (socket) => {
 
   // If this is a teacher connecting (no registration needed)
   socket.on('i_am_teacher', () => {
+    // Set a flag on the socket to identify it as a teacher
+    socket.data = { isTeacher: true };
+    
     // Send current participants list to the teacher
     const participants = [...connectedUsers.values()];
     console.log('Sending participants update:', participants);
@@ -273,31 +276,55 @@ io.on('connection', (socket) => {
     recentMessages.push(message);
     if (recentMessages.length > 10) recentMessages.shift();
     
-    // Only analyze teacher messages to avoid unnecessary API calls
+    console.log(`Messages collected: ${recentMessages.length}, Active poll: ${!!state.activePoll}, User: ${message.user}`);
+    
+    // Only analyze non-teacher messages when we have enough messages and there's an active poll
     if (recentMessages.length >= 3 && message.user !== 'Teacher' && state.activePoll) {
       try {
+        console.log('Analyzing student messages for confusion...');
         const { analyzeStudentMessages } = require('./services/studentAnalytics');
         const analysis = await analyzeStudentMessages(
           recentMessages, 
           state.activePoll.question
         );
         
+        console.log('Analysis result:', analysis);
+        
         if (analysis && analysis.confusionDetected && analysis.confidenceScore > 0.7) {
-          // Alert only the teacher about detected confusion
-          const teacherSocket = [...io.sockets.sockets.values()].find(s => {
-            return s.data && s.data.isTeacher;
-          });
+          console.log('Confusion detected! Finding teacher socket...');
+          
+          // Get all sockets and find the teacher
+          let teacherSocket = null;
+          for (const [id, s] of io.sockets.sockets.entries()) {
+            if (state.connectedStudents.get(id) === undefined || s.data?.isTeacher) {
+              console.log('Found teacher socket!');
+              teacherSocket = s;
+              break;
+            }
+          }
           
           if (teacherSocket) {
+            console.log('Sending confusion alert to teacher');
+            
+            // Use the AI-identified confused student if available, otherwise use the most recent message sender
+            const confusedStudent = analysis.confusedStudent || message.user;
+            
             teacherSocket.emit('student_confusion_alert', {
+              studentName: confusedStudent,
               issue: analysis.specificIssue,
               recommendation: analysis.recommendedAction
             });
+          } else {
+            console.log('No teacher socket found to send alert to');
           }
+        } else {
+          console.log('No confusion detected or confidence too low');
         }
       } catch (error) {
         console.error('Error analyzing student messages:', error);
       }
+    } else {
+      console.log('Skipping analysis: not enough messages, from teacher, or no active poll');
     }
     
     // Broadcast message to all clients

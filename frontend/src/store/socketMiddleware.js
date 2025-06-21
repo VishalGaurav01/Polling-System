@@ -55,7 +55,10 @@ const socketMiddleware = socket => store => next => action => {
         type: 'confusion/alertReceived',
         payload: data
       });
-      dispatch(showInfoToast('Student confusion detected'));
+      
+      // Include student name in the toast
+      const studentName = data.studentName || 'A student';
+      dispatch(showInfoToast(`${studentName} appears to be confused`));
     });
     
     // Student events

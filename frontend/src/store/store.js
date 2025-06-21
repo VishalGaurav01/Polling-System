@@ -3,6 +3,7 @@ import { io } from 'socket.io-client';
 import pollReducer, { initSocket } from '../features/pollSlice';
 import themeReducer from '../features/themeSlice';
 import toastReducer from '../features/toastSlice';
+import confusionReducer from '../features/confusionSlice';
 import socketMiddleware from './socketMiddleware';
 
 // Create socket instance
@@ -14,7 +15,8 @@ const store = configureStore({
   reducer: {
     poll: pollReducer,
     theme: themeReducer,
-    toast: toastReducer
+    toast: toastReducer,
+    confusion: confusionReducer
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat(socketMiddleware(socket))
