@@ -1,8 +1,17 @@
+// Make sure dotenv is loaded first
+require('dotenv').config();
+
+// For debugging
+console.log('Environment variables loaded. API key exists:', !!process.env.ANTHROPIC_API_KEY);
+
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const Poll = require('./models/poll');
+const { enhanceQuestion } = require('./services/questionEnhancer');
+const { analyzePollResults } = require('./services/resultsAnalyzer');
+const bodyParser = require('body-parser');
 
 const app = express();
 const server = http.createServer(app);
@@ -13,6 +22,9 @@ app.use(cors({
   methods: ['GET', 'POST'],
   credentials: true
 }));
+
+// Add body parser middleware
+app.use(bodyParser.json());
 
 // Configure Socket.io with CORS
 const io = new Server(server, {
@@ -40,6 +52,9 @@ io.on('connection', (socket) => {
 
   // If this is a teacher connecting (no registration needed)
   socket.on('i_am_teacher', () => {
+    // Set a flag on the socket to identify it as a teacher
+    socket.data = { isTeacher: true };
+    
     // Send current participants list to the teacher
     const participants = [...connectedUsers.values()];
     console.log('Sending participants update:', participants);
@@ -252,8 +267,66 @@ io.on('connection', (socket) => {
   });
 
   // Handle chat messages
-  socket.on('send_message', (message) => {
+  const recentMessages = [];
+
+  socket.on('send_message', async (message) => {
     console.log('Chat message received:', message);
+    
+    // Store recent messages for analysis
+    recentMessages.push(message);
+    if (recentMessages.length > 10) recentMessages.shift();
+    
+    console.log(`Messages collected: ${recentMessages.length}, Active poll: ${!!state.activePoll}, User: ${message.user}`);
+    
+    // Only analyze non-teacher messages when we have enough messages and there's an active poll
+    if (recentMessages.length >= 3 && message.user !== 'Teacher' && state.activePoll) {
+      try {
+        console.log('Analyzing student messages for confusion...');
+        const { analyzeStudentMessages } = require('./services/studentAnalytics');
+        const analysis = await analyzeStudentMessages(
+          recentMessages, 
+          state.activePoll.question
+        );
+        
+        console.log('Analysis result:', analysis);
+        
+        if (analysis && analysis.confusionDetected && analysis.confidenceScore > 0.7) {
+          console.log('Confusion detected! Finding teacher socket...');
+          
+          // Get all sockets and find the teacher
+          let teacherSocket = null;
+          for (const [id, s] of io.sockets.sockets.entries()) {
+            if (state.connectedStudents.get(id) === undefined || s.data?.isTeacher) {
+              console.log('Found teacher socket!');
+              teacherSocket = s;
+              break;
+            }
+          }
+          
+          if (teacherSocket) {
+            console.log('Sending confusion alert to teacher');
+            
+            // Use the AI-identified confused student if available, otherwise use the most recent message sender
+            const confusedStudent = analysis.confusedStudent || message.user;
+            
+            teacherSocket.emit('student_confusion_alert', {
+              studentName: confusedStudent,
+              issue: analysis.specificIssue,
+              recommendation: analysis.recommendedAction
+            });
+          } else {
+            console.log('No teacher socket found to send alert to');
+          }
+        } else {
+          console.log('No confusion detected or confidence too low');
+        }
+      } catch (error) {
+        console.error('Error analyzing student messages:', error);
+      }
+    } else {
+      console.log('Skipping analysis: not enough messages, from teacher, or no active poll');
+    }
+    
     // Broadcast message to all clients
     io.emit('chat_message', message);
   });
@@ -304,6 +377,76 @@ io.on('connection', (socket) => {
       state.activePoll = null;
     }
   });
+});
+
+// Endpoint for enhancing questions with AI
+app.post('/api/enhance-question', async (req, res) => {
+  try {
+    const { question, options } = req.body;
+    
+    if (!question || !options || !Array.isArray(options)) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid request. Question and options array required.' 
+      });
+    }
+    
+    const result = await enhanceQuestion(question, options);
+    
+    if (result) {
+      return res.json({ 
+        success: true, 
+        enhancedQuestion: result.enhancedQuestion,
+        enhancedOptions: result.enhancedOptions,
+        suggestedCorrectAnswer: result.suggestedCorrectAnswer
+      });
+    } else {
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Failed to enhance question' 
+      });
+    }
+  } catch (error) {
+    console.error('Error in enhance-question endpoint:', error);
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Server error while enhancing question' 
+    });
+  }
+});
+
+// Endpoint for analyzing poll results with AI
+app.post('/api/analyze-results', async (req, res) => {
+  try {
+    const { pollData, results } = req.body;
+    
+    if (!pollData || !results) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid request. Poll data and results required.' 
+      });
+    }
+    
+    const analysis = await analyzePollResults(pollData, results);
+    
+    if (analysis) {
+      return res.json({ 
+        success: true, 
+        analysis 
+      });
+    } else {
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Failed to analyze results' 
+      });
+    }
+  } catch (error) {
+    console.error('Error in analyze-results endpoint:', error);
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Server error while analyzing results' 
+    });
+  }
 });
 
 // Start the server

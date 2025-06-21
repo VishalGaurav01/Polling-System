@@ -2,8 +2,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
-import { 
-  createPoll, 
+import {
+  createPoll,
   getResults,
   pollCreateStarted,
   kickStudent,
@@ -17,9 +17,10 @@ import {
 } from '../features/pollSlice';
 import ChatBox from './ChatBox';
 import PollResults from './PollResults';
-import {useToast} from '../hooks/useToast';
+import { useToast } from '../hooks/useToast';
 import MCQImageParser from './MCQImageParser';
 import ConfirmModal from './ConfirmModal';
+import ConfusionAlert from './ConfusionAlert';
 
 function Teacher() {
   // Add new state for the confirm modal
@@ -43,8 +44,9 @@ function Teacher() {
   const [options, setOptions] = useState(['', '']);
   const [timeLimit, setTimeLimit] = useState(60);
   const [showChat, setShowChat] = useState(false);
+  const [isEnhancing, setIsEnhancing] = useState(false);
   const [correctOptionIndex, setCorrectOptionIndex] = useState(null);
-  
+
   useEffect(() => {
     dispatch({ type: 'socket/identifyAsTeacher' });
     dispatch({ type: 'socket/requestParticipants' });
@@ -64,11 +66,11 @@ function Teacher() {
     const participantsInterval = setInterval(() => {
       dispatch({ type: 'socket/requestParticipants' });
     }, 5000); // Every 5 seconds
-    
+
     return () => clearInterval(participantsInterval);
   }, [dispatch]);
 
-  const handleQuestionParsed = ({question: parsedQuestion, options: parsedOptions}) => {
+  const handleQuestionParsed = ({ question: parsedQuestion, options: parsedOptions }) => {
     setQuestion(parsedQuestion);
     setOptions(parsedOptions);
     toast.success('Question and options extracted from image');
@@ -96,19 +98,60 @@ function Teacher() {
       }
     }
   };
+  const handleEnhanceQuestion = async () => {
+    if (!question.trim() || options.filter(o => o.trim()).length < 2) {
+      toast.error('Please enter a question and at least two options first');
+      return;
+    }
+
+    setIsEnhancing(true);
+    try {
+      // Get the backend URL from the environment variable or use the default
+      const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000';
+
+      const response = await fetch(`${BACKEND_URL}/api/enhance-question`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question: question.trim(),
+          options: options.filter(o => o.trim())
+        })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setQuestion(data.enhancedQuestion);
+        setOptions(data.enhancedOptions);
+        // Set correct option based on suggestion
+        const correctIndex = data.enhancedOptions.findIndex(
+          option => option === data.suggestedCorrectAnswer
+        );
+        if (correctIndex >= 0) setCorrectOptionIndex(correctIndex);
+
+        toast.success('Question enhanced with AI');
+      } else {
+        toast.error('Failed to enhance question');
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      toast.error('Error connecting to AI service');
+    } finally {
+      setIsEnhancing(false);
+    }
+  };
 
   const handleCreatePoll = () => {
     if (!question.trim()) {
       toast.error('Please enter a question');
       return;
     }
-    
+
     const validOptions = options.filter(opt => opt.trim() !== '');
     if (validOptions.length < 2) {
       toast.error('Please provide at least two answer options');
       return;
     }
-    
+
     // Add this constraint - check if a correct answer is selected
     if (correctOptionIndex === null) {
       toast.error('Please mark at least one option as correct');
@@ -116,7 +159,7 @@ function Teacher() {
     }
 
     const correctAnswer = options[correctOptionIndex];
-    
+
     dispatch(pollCreateStarted());
     dispatch(createPoll({
       question: question.trim(),
@@ -133,13 +176,13 @@ function Teacher() {
       message: `Are you sure you want to kick out ${studentName}?`
     });
   };
-  
+
   // Add handlers for confirm modal actions
   const handleConfirmKick = () => {
     dispatch(kickStudent(confirmModal.studentName));
     setConfirmModal({ isOpen: false, studentName: '', message: '' });
   };
-  
+
   const handleCancelKick = () => {
     setConfirmModal({ isOpen: false, studentName: '', message: '' });
   };
@@ -148,15 +191,17 @@ function Teacher() {
     dispatch(getResults());
   };
 
-  const handleNewQuestion = () => {
-    setQuestion('');
+  const handleNewQuestion = (resetQuestionText = true) => {
+    if (resetQuestionText) {
+      setQuestion('');
+    }
     setOptions(['', '']);
     setTimeLimit(60);
     setCorrectOptionIndex(null);
     dispatch({ type: 'poll/resetState' });
     setTimeout(() => {
       dispatch({ type: 'socket/requestParticipants' });
-    }, 100); 
+    }, 100);
   };
 
   const handleSendMessage = (message) => {
@@ -168,12 +213,12 @@ function Teacher() {
       }
     });
   };
-
   if (results) {
     return (
       <div className="max-w-3xl mx-auto p-4 bg-white dark:bg-dark-bg text-black dark:text-white">
+         <ConfusionAlert />
         <div className="flex justify-end mb-4">
-          <button 
+          <button
             onClick={() => navigate('/poll-history')}
             className="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-4 rounded-full flex items-center"
           >
@@ -184,8 +229,14 @@ function Teacher() {
             View Poll history
           </button>
         </div>
-        
-        <PollResults results={results} />
+
+        <PollResults
+          results={results}
+          timeLeft={activePoll?.timeLeft}
+          setQuestion={setQuestion}
+          handleNewQuestion={handleNewQuestion}
+          teacher = {true}
+        />
 
         <div className="mt-8 flex justify-center">
           <button
@@ -201,7 +252,7 @@ function Teacher() {
 
         {showChat && (
           <div className="fixed bottom-20 right-6 w-80 z-10 shadow-xl">
-            <ChatBox 
+            <ChatBox
               isTeacher={true}
               onKickStudent={handleKickStudent}
               onSendMessage={handleSendMessage}
@@ -209,8 +260,8 @@ function Teacher() {
             />
           </div>
         )}
-        
-        <button 
+
+        <button
           className="fixed bottom-6 right-6 bg-indigo-500 text-white rounded-full p-4 shadow-lg z-20"
           onClick={() => setShowChat(!showChat)}
         >
@@ -231,6 +282,7 @@ function Teacher() {
 
   return (
     <div className="max-w-3xl mx-auto p-4 bg-white dark:bg-dark-bg text-black dark:text-white">
+      <ConfusionAlert />
       <div className="mb-6">
         <button className="bg-indigo-500 text-white font-semibold py-2 px-4 rounded-full flex items-center">
           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
@@ -243,11 +295,11 @@ function Teacher() {
       <div className="text-center mb-8">
         <h1 className="text-4xl font-bold mb-2">Let's Get Started</h1>
         <p className="text-gray-600 dark:text-gray-400">
-          you'll have the ability to create and manage polls, ask questions, and monitor 
+          you'll have the ability to create and manage polls, ask questions, and monitor
           your students' responses in real-time.
         </p>
       </div>
-      
+
       {error && (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
           {error}
@@ -270,7 +322,14 @@ function Teacher() {
           rows={4}
           disabled={isPollCreating}
         ></textarea>
-        <div className="flex justify-end mt-1">
+        <div className="flex justify-between mt-1">
+          <button
+            onClick={handleEnhanceQuestion}
+            disabled={isEnhancing || !question.trim()}
+            className="mt-2 text-indigo-500 hover:text-indigo-700 font-semibold py-2 px-4 border border-indigo-500 rounded-md"
+          >
+            {isEnhancing ? 'Enhancing...' : '✨ Enhance with AI'}
+          </button>
           <span className="text-gray-500 dark:text-gray-400 text-sm">
             {question.length}/100
           </span>
@@ -310,7 +369,7 @@ function Teacher() {
             Is it Correct?
           </label>
         </div>
-        
+
         {options.map((option, index) => (
           <div key={index} className="flex items-center mb-3">
             <div className="w-8 h-8 rounded-full bg-indigo-500 text-white flex items-center justify-center mr-3">
@@ -324,7 +383,7 @@ function Teacher() {
               placeholder={`Option ${index + 1}`}
               disabled={isPollCreating}
             />
-            
+
             <div className="flex items-center ml-4">
               {/* <span className="mr-2 text-gray-700 dark:text-gray-300">Is it Correct?</span> */}
               <label className="inline-flex items-center mr-2">
@@ -364,7 +423,7 @@ function Teacher() {
             </div>
           </div>
         ))}
-        
+
         <button
           type="button"
           onClick={addOption}
@@ -388,14 +447,14 @@ function Teacher() {
 
       {showChat && (
         <div className="fixed bottom-20 right-6 w-80 z-10 shadow-xl">
-          <ChatBox 
+          <ChatBox
             isTeacher={true}
             onKickStudent={handleKickStudent}
           />
         </div>
       )}
-      
-      <button 
+
+      <button
         className="fixed bottom-6 right-6 bg-indigo-500 text-white rounded-full p-4 shadow-lg z-20"
         onClick={() => setShowChat(!showChat)}
       >

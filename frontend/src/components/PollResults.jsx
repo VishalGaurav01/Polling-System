@@ -1,13 +1,49 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useSelector } from 'react-redux';
 import { selectSelectedOption, selectActivePoll } from '../features/pollSlice';
+import { useToast } from '../hooks/useToast';
 
-function PollResults({ results, timeLeft }) {
+function PollResults({ results, timeLeft, setQuestion, handleNewQuestion, teacher }) {
   const userAnswer = useSelector(selectSelectedOption);
   const activePoll = useSelector(selectActivePoll); // Get the active poll state
+  const [analysis, setAnalysis] = useState(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const toast = useToast();
   
   // Only show correct answer when there's no active poll (poll is finished)
   const isPollFinished = !activePoll;
+
+  const getResultsAnalysis = async () => {
+    setIsAnalyzing(true);
+    try {
+      // Get the backend URL from the environment variable or use the default
+      const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000';
+      
+      const response = await fetch(`${BACKEND_URL}/api/analyze-results`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          pollData: {
+            question: results.question,
+            correctAnswer: results.correctAnswer,
+          },
+          results
+        })
+      });
+      
+      const data = await response.json();
+      if (data.success) {
+        setAnalysis(data.analysis);
+      } else {
+        toast.error('Failed to analyze results');
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      toast.error('Error connecting to AI service');
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
   
   return (
     <div className="max-w-2xl mx-auto p-6 rounded-lg bg-white dark:bg-dark-bg text-black dark:text-white">
@@ -124,6 +160,70 @@ function PollResults({ results, timeLeft }) {
             </div>
           );
         })}
+      </div>
+
+      <div className="mt-8 border-t pt-6">
+        {!analysis && teacher ? (
+          <button
+            onClick={getResultsAnalysis}
+            disabled={isAnalyzing}
+            className="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-4 rounded-full"
+          >
+            {isAnalyzing ? 'Analyzing...' : 'Get AI Analysis'}
+          </button>
+        ) : analysis && (
+          <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+            <h3 className="text-lg font-medium mb-3">AI Analysis</h3>
+            
+            <div className="mb-4">
+              <h4 className="font-medium">Key Insights:</h4>
+              <p className="text-gray-700 dark:text-gray-300">{analysis.analysis}</p>
+            </div>
+            
+            <div className="mb-4">
+              <h4 className="font-medium">Potential Misconceptions:</h4>
+              <ul className="list-disc pl-5">
+                {analysis.misconceptions.map((item, i) => (
+                  <li key={i} className="text-gray-700 dark:text-gray-300">{item}</li>
+                ))}
+              </ul>
+            </div>
+            
+            <div className="mb-4">
+              <h4 className="font-medium">Recommended Next Steps:</h4>
+              <ul className="list-disc pl-5">
+                {analysis.recommendedNextSteps.map((item, i) => (
+                  <li key={i} className="text-gray-700 dark:text-gray-300">{item}</li>
+                ))}
+              </ul>
+            </div>
+            
+            <div>
+              <h4 className="font-medium">Suggested Follow-up Question:</h4>
+              <p className="text-gray-700 dark:text-gray-300 italic">
+                "{analysis.followUpQuestion}"
+              </p>
+              <button
+                onClick={() => {
+                  // Store the follow-up question
+                  setQuestion(analysis.followUpQuestion);
+                  // Use options from the analysis if available, otherwise create empty options
+                  if (analysis.options && analysis.options.length > 0) {
+                    // If the analysis provides options, use them
+                    handleNewQuestion(false); // Don't reset the question
+                  } else {
+                    // If there are no options in the analysis, just clear the current poll state
+                    // but keep the question we just set
+                    handleNewQuestion(false); // Don't reset the question
+                  }
+                }}
+                className="mt-2 text-indigo-500 hover:text-indigo-700 text-sm underline"
+              >
+                Use this question
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
