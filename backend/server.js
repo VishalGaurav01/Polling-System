@@ -1,8 +1,17 @@
+// Make sure dotenv is loaded first
+require('dotenv').config();
+
+// For debugging
+console.log('Environment variables loaded. API key exists:', !!process.env.ANTHROPIC_API_KEY);
+
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const Poll = require('./models/poll');
+const { enhanceQuestion } = require('./services/questionEnhancer');
+const { analyzePollResults } = require('./services/resultsAnalyzer');
+const bodyParser = require('body-parser');
 
 const app = express();
 const server = http.createServer(app);
@@ -13,6 +22,9 @@ app.use(cors({
   methods: ['GET', 'POST'],
   credentials: true
 }));
+
+// Add body parser middleware
+app.use(bodyParser.json());
 
 // Configure Socket.io with CORS
 const io = new Server(server, {
@@ -252,8 +264,42 @@ io.on('connection', (socket) => {
   });
 
   // Handle chat messages
-  socket.on('send_message', (message) => {
+  const recentMessages = [];
+
+  socket.on('send_message', async (message) => {
     console.log('Chat message received:', message);
+    
+    // Store recent messages for analysis
+    recentMessages.push(message);
+    if (recentMessages.length > 10) recentMessages.shift();
+    
+    // Only analyze teacher messages to avoid unnecessary API calls
+    if (recentMessages.length >= 3 && message.user !== 'Teacher' && state.activePoll) {
+      try {
+        const { analyzeStudentMessages } = require('./services/studentAnalytics');
+        const analysis = await analyzeStudentMessages(
+          recentMessages, 
+          state.activePoll.question
+        );
+        
+        if (analysis && analysis.confusionDetected && analysis.confidenceScore > 0.7) {
+          // Alert only the teacher about detected confusion
+          const teacherSocket = [...io.sockets.sockets.values()].find(s => {
+            return s.data && s.data.isTeacher;
+          });
+          
+          if (teacherSocket) {
+            teacherSocket.emit('student_confusion_alert', {
+              issue: analysis.specificIssue,
+              recommendation: analysis.recommendedAction
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Error analyzing student messages:', error);
+      }
+    }
+    
     // Broadcast message to all clients
     io.emit('chat_message', message);
   });
@@ -304,6 +350,76 @@ io.on('connection', (socket) => {
       state.activePoll = null;
     }
   });
+});
+
+// Endpoint for enhancing questions with AI
+app.post('/api/enhance-question', async (req, res) => {
+  try {
+    const { question, options } = req.body;
+    
+    if (!question || !options || !Array.isArray(options)) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid request. Question and options array required.' 
+      });
+    }
+    
+    const result = await enhanceQuestion(question, options);
+    
+    if (result) {
+      return res.json({ 
+        success: true, 
+        enhancedQuestion: result.enhancedQuestion,
+        enhancedOptions: result.enhancedOptions,
+        suggestedCorrectAnswer: result.suggestedCorrectAnswer
+      });
+    } else {
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Failed to enhance question' 
+      });
+    }
+  } catch (error) {
+    console.error('Error in enhance-question endpoint:', error);
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Server error while enhancing question' 
+    });
+  }
+});
+
+// Endpoint for analyzing poll results with AI
+app.post('/api/analyze-results', async (req, res) => {
+  try {
+    const { pollData, results } = req.body;
+    
+    if (!pollData || !results) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid request. Poll data and results required.' 
+      });
+    }
+    
+    const analysis = await analyzePollResults(pollData, results);
+    
+    if (analysis) {
+      return res.json({ 
+        success: true, 
+        analysis 
+      });
+    } else {
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Failed to analyze results' 
+      });
+    }
+  } catch (error) {
+    console.error('Error in analyze-results endpoint:', error);
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Server error while analyzing results' 
+    });
+  }
 });
 
 // Start the server

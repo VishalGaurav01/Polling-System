@@ -50,6 +50,14 @@ const socketMiddleware = socket => store => next => action => {
       dispatch(updateTimer(data.timeRemaining));
     });
     
+    socket.on('student_confusion_alert', (data) => {
+      dispatch({
+        type: 'confusion/alertReceived',
+        payload: data
+      });
+      dispatch(showInfoToast('Student confusion detected'));
+    });
+    
     // Student events
     socket.on('registration_success', (data) => {
       dispatch(studentRegistered(data.name));
